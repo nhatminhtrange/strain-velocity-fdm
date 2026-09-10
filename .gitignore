@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# SPECFEM run artefacts
+validation/bin/
+validation/OUTPUT_FILES/
+validation/DATA/
+validation/solver.log
+validation/results/*.npz
+validation/results/*.pdf
+
+# downloaded on demand by compare_analytic.py (LGPL-3.0, not redistributed)
+validation/external/
