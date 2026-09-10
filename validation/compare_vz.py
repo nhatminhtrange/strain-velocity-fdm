@@ -41,16 +41,21 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.9")
 CASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(CASE_DIR))
 import jax.numpy as jnp
-from fwi import build_forward_fn, ricker_jax
+from forward import build_forward_fn, ricker_jax
 
 MODEL_DIR = os.path.join(os.path.dirname(CASE_DIR), 'marmousi_models')
 OUT_DIR = os.path.join(CASE_DIR, 'results')
 
 MODEL_DX = 20.0                       # grid spacing of the stored model
 DX = float(os.environ.get('DX', 5.0))
-SPEC_OUT = os.environ.get('SPEC_OUT', os.path.join(CASE_DIR, 'OUTPUT_FILES'))
-SPEC_LOG = os.environ.get('SPEC_LOG', os.path.join(CASE_DIR, 'solver.log'))
-SPEC_PAR = os.environ.get('SPEC_PAR', os.path.join(CASE_DIR, 'DATA', 'Par_file'))
+# Stored SPECFEM2D run to compare against. `reference/` ships with the
+# repository so the comparison reproduces without a SPECFEM2D installation;
+# set SPEC_OUT/SPEC_LOG/SPEC_PAR to use your own run instead.
+CASE = os.environ.get('CASE', 'nofs')     # 'nofs' or 'fs'
+REFERENCE = os.path.join(CASE_DIR, 'reference', f'specfem_vz_{CASE}.npz')
+SPEC_OUT = os.environ.get('SPEC_OUT')
+SPEC_LOG = os.environ.get('SPEC_LOG')
+SPEC_PAR = os.environ.get('SPEC_PAR')
 
 SRC_X = 2000.0                        # source position in metres
 TMAX = 6.0
@@ -88,6 +93,27 @@ def load_specfem(out_dir, nrec):
                       dtype=np.float32)
     nt = raw.size // nrec
     return raw[:nrec * nt].reshape(nrec, nt).T, nt
+
+
+def load_reference(path):
+    """Read a stored SPECFEM2D run shipped with the repository.
+
+    Traces are held as float16 scaled to unit peak, which keeps the file small
+    while staying three orders of magnitude more accurate than the differences
+    being measured.
+    """
+    d = np.load(path)
+    return (d['vz'].astype(np.float64) * float(d['scale']),
+            float(d['dt']), float(d['t0']))
+
+
+# geometry of the two shipped reference runs (see build_specfem_case.py)
+REFERENCE_GEOMETRY = {
+    'nofs': dict(free_surface=False, pml=400.0, rec_depth=200.0,
+                 src_depth=600.0, x_first_rec=400.0, fc=3.0, dt=4.28e-4),
+    'fs':   dict(free_surface=True, pml=400.0, rec_depth=0.0,
+                 src_depth=0.0, x_first_rec=400.0, fc=3.0, dt=4.28e-4),
+}
 
 
 def read_geometry(par):
@@ -275,7 +301,9 @@ def plot(vs, fd, spec, t, locs, geom, dx, nx_ref, path):
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
-    geom = read_geometry(SPEC_PAR)
+    using_reference = SPEC_PAR is None
+    geom = (REFERENCE_GEOMETRY[CASE] if using_reference
+            else read_geometry(SPEC_PAR))
     fc = geom['fc']
     print(f"SPECFEM: f0={fc} Hz, dt={geom['dt'] * 1e3:.4f} ms, "
           f"free_surface={geom['free_surface']}")
@@ -305,9 +333,15 @@ def main():
     print(f"  FD dt={dt * 1e3:.4f} ms, nt={nt}, gather {fd.shape}")
 
     # align both datasets on a common time origin (the source peak)
-    spec_raw, nt_spec = load_specfem(SPEC_OUT, nx_ref)
+    if using_reference:
+        spec_raw, dt_spec, t0_spec = load_reference(REFERENCE)
+        nt_spec = spec_raw.shape[0]
+        print(f"  reference run: {os.path.basename(REFERENCE)}")
+    else:
+        spec_raw, nt_spec = load_specfem(SPEC_OUT, nx_ref)
+        dt_spec, t0_spec = geom['dt'], specfem_t0(SPEC_LOG)
     t = np.arange(nt) * dt - 1.5 / fc
-    t_spec = specfem_t0(SPEC_LOG) + np.arange(nt_spec) * geom['dt']
+    t_spec = t0_spec + np.arange(nt_spec) * dt_spec
     spec, scale = align(fd, spec_raw, t, t_spec)
     print(f"  amplitude scale (SPECFEM -> FD) = {scale:.4f}")
 

@@ -43,7 +43,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.9")
 CASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(CASE_DIR))
 import jax.numpy as jnp
-from fwi import forward_jax, ricker_jax
+from forward import forward_jax, ricker_jax
 
 UPSTREAM = 'https://raw.githubusercontent.com/ktkimit/lamb_2dhalf_surface/master/lamb2d_freesurface.py'
 

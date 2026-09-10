@@ -1,22 +1,28 @@
 # Strain-velocity FDM
 
-A JAX implementation of 2D P-SV elastic wave propagation on a staggered grid,
-written in the **velocity-strain** formulation rather than the usual
-velocity-stress one. The solver is differentiable end to end, which is what it
-was built for: gradients with respect to `Vp`, `Vs` and `rho` come straight
-from `jax.grad`, so it drops into full-waveform inversion without an adjoint
-solver written by hand.
+Forward modelling of 2D P-SV elastic waves in JAX, written in the
+**velocity-strain** formulation on a staggered grid.
+
+The solver is a single JAX function: jitted, vectorisable over shots with
+`vmap`, and differentiable with respect to `Vp`, `Vs` and `rho` through
+`jax.grad`. Gradients come from reverse-mode automatic differentiation of the
+time loop itself, so there is no separate adjoint solver to write or keep in
+sync with the forward one. Block checkpointing keeps the memory cost of that
+reverse pass bounded.
 
 Features:
 
 - 2nd, 4th and 8th order spatial accuracy
 - C-PML absorbing boundaries with a stretching factor (`kappa`), which handles
   grazing incidence better than the `kappa = 1` variant
-- Free surface or PML on all four sides
-- Block checkpointing so long simulations fit in memory under reverse-mode AD
+- Free surface, or PML on all four sides
+- Records particle velocity (`vx`, `vz`) and strain (`exx`, `ezz`)
 - Optional DAS gauge-length averaging for strain recordings
 
 ## Install
+
+The solver is a single file, `forward.py`. Copy it next to your script, or add
+this directory to `sys.path`.
 
 ```bash
 pip install "jax[cuda12]" numpy scipy matplotlib   # or plain jax for CPU
@@ -26,7 +32,7 @@ pip install "jax[cuda12]" numpy scipy matplotlib   # or plain jax for CPU
 
 ```python
 import numpy as np, jax.numpy as jnp
-from fwi import build_forward_fn, ricker_jax
+from forward import build_forward_fn, ricker_jax
 
 nz, nx, dx, dt, nt, fc = 152, 500, 20.0, 2e-3, 3000, 6.0
 vs  = np.full((nz, nx), 1500.0)
@@ -45,35 +51,63 @@ vx, vz, exx, ezz = run_shot(jnp.array(vs), jnp.array(vp), jnp.array(rho),
                             jnp.int32(nx // 2), jnp.int32(0), wavelet)
 ```
 
-`run_shot` is jitted and differentiable: `jax.grad` over a misfit built from
-its output gives the FWI gradient directly.
+Differentiating through it:
+
+```python
+import jax
+
+def misfit(vs_model):
+    _, vz, _, _ = run_shot(vs_model, jnp.array(vp), jnp.array(rho),
+                           jnp.int32(nx // 2), jnp.int32(0), wavelet)
+    return jnp.sum((vz - observed) ** 2)
+
+grad = jax.grad(misfit)(jnp.array(vs))     # same shape as the model
+```
+
+Shots run in parallel with `jax.vmap(run_shot, in_axes=(None, None, None, 0, 0, None))`.
 
 ## Validation
 
-`validation/` cross-checks the solver against SPECFEM2D on Marmousi and
-against the analytic 2D Lamb solution on a homogeneous half-space.
+Two independent checks, both reproducible from this repository.
+
+**Against SPECFEM2D on Marmousi.** Stored SPECFEM2D seismograms ship in
+`validation/reference/`, so the comparison runs without a SPECFEM2D build:
 
 ```bash
-python validation/build_specfem_case.py    # writes DATA/ for SPECFEM2D
-./validation/run_this_example.sh           # needs a SPECFEM2D build
-python validation/compare_vz.py            # dx = 5 m by default
-python validation/compare_analytic.py      # no SPECFEM2D needed
-                                          # (downloads the Lamb solver once)
+python validation/compare_vz.py              # body waves,  dx = 5 m
+CASE=fs python validation/compare_vz.py      # surface waves
 ```
 
-Vertical velocity on Marmousi, `fc = 3 Hz`, 8th order, `dx = 5 m`, correlation
-over all 500 receivers:
+Vertical velocity, `fc = 3 Hz`, 8th order, `dx = 5 m`, over all 500 receivers:
 
 | configuration | rel. RMS | correlation | amplitude ratio |
 | --- | --- | --- | --- |
-| body waves (PML on all sides, source 600 m deep) | 0.021 | 0.9998 | 1.003 |
+| body waves (PML on all sides, source 600 m deep) | 0.024 | 0.9997 | 1.003 |
 | surface waves (free surface, source at the surface) | 0.398 | 0.921 | 0.896 |
 
 ![Marmousi comparison](validation/results/specfem_vs_svfdm_vz_dx5_fc3_ord8_nofs.png)
 
-Against the analytic Lamb solution, correlation improves monotonically with
-grid refinement and depends only on how many grid points sample the shortest
-wavelength:
+To regenerate the reference instead of using the stored one, you need a
+SPECFEM2D installation:
+
+```bash
+python validation/build_specfem_case.py    # writes DATA/
+./validation/run_this_example.sh
+SPEC_OUT=OUTPUT_FILES SPEC_LOG=solver.log SPEC_PAR=DATA/Par_file \
+    python validation/compare_vz.py
+```
+
+**Against the analytic Lamb solution.** A vertical line force on a homogeneous
+half-space has a closed-form response, so this needs no reference solver at
+all:
+
+```bash
+python validation/compare_analytic.py
+```
+
+Correlation with the analytic trace depends only on how many grid points
+sample the shortest wavelength — the same curve for `fc = 6 Hz` and
+`fc = 20 Hz`, whose absolute scales differ by more than a factor of three:
 
 | points per wavelength | nearest offset | farthest offset |
 | --- | --- | --- |
@@ -82,10 +116,10 @@ wavelength:
 | 14.2 | 0.989 | 0.918 |
 | 21.2 | 0.998 | 0.979 |
 
-Surface waves are the limiting case: they travel in the slowest layer, so at a
+Surface waves are the limiting case. They travel in the slowest layer, so at a
 given spacing they are sampled about twice as coarsely as body waves, and they
 do not spread geometrically, so they dominate the record at long offsets.
-Refining the grid is the effective remedy — raising the FD order is not, since
+Refining the grid is the effective remedy; raising the FD order is not, since
 4th and 8th order already agree with each other.
 
 ## Third-party code
