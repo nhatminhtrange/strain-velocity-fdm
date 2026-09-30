@@ -61,9 +61,9 @@ SRC_X = 2000.0                        # source position in metres
 TMAX = 6.0
 COMPONENT = 1                         # 0=vx, 1=vz, 2=exx, 3=ezz
 FD_ORDER = 8
-PAD = 80                              # PML width in grid points
+PML = 400.0                           # PML width in metres (80 points at dx = 5 m)
 BLOCK = 250
-OFFSETS = [500, 1000, 2000, 3000, 4000, 5000]
+OFFSETS = [1000, 2000, 5000, 6000]
 FD_STABILITY = {2: 1.0,
                 4: 9 / 8 + 1 / 24,
                 8: 1225 / 1024 + 245 / 3072 + 49 / 5120 + 5 / 7168}
@@ -313,7 +313,8 @@ def main():
     vp, vs, rho, nx_ref = load_model(DX)
     nz, nx = vs.shape
     step = int(round(MODEL_DX / DX))
-    print(f"  FD grid dx={DX:g} m -> {nz} x {nx}")
+    pad = int(round(PML / DX))
+    print(f"  FD grid dx={DX:g} m -> {nz} x {nx}, PML {pad} points")
 
     # forward modelling on the FD grid
     dt = 0.9 / (FD_STABILITY[FD_ORDER] * vp.max() * np.sqrt(2) / DX)
@@ -322,14 +323,17 @@ def main():
     src_iz = int(round(geom['src_depth'] / DX))
     rec_iz = int(round(geom['rec_depth'] / DX))
 
-    run_shot = build_forward_fn(nz, nx, DX, DX, dt, nt, fc, PAD, BLOCK,
-                                np.arange(nx), np.full(nx, rec_iz, dtype=int),
+    # record only on the model columns; a receiver at every fine-grid column
+    # would hold nt x nx samples, several GB at dx = 1 m
+    rec_ix = np.arange(nx_ref) * step
+    run_shot = build_forward_fn(nz, nx, DX, DX, dt, nt, fc, pad, BLOCK,
+                                rec_ix, np.full(nx_ref, rec_iz, dtype=int),
                                 fd_order=FD_ORDER, component=COMPONENT,
                                 free_surface=geom['free_surface'])
     wavelet = ricker_jax(jnp.arange(nt) * dt, fc, 1.5 / fc)
     fd = np.asarray(run_shot(jnp.array(vs), jnp.array(vp), jnp.array(rho),
                              jnp.int32(src_ix), jnp.int32(src_iz),
-                             wavelet)[COMPONENT])[:, ::step][:, :nx_ref]
+                             wavelet)[COMPONENT])
     print(f"  FD dt={dt * 1e3:.4f} ms, nt={nt}, gather {fd.shape}")
 
     # align both datasets on a common time origin (the source peak)

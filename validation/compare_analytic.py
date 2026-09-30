@@ -98,8 +98,10 @@ PRESETS = {
 COLORS = ['tab:blue', 'tab:orange', 'tab:red']
 
 
-def analytic_velocity(green, cfg):
-    """Vertical particle velocity at each offset, on a shared time axis.
+def analytic_velocity(green, cfg, component=1):
+    """Particle velocity at each offset, on a shared time axis.
+
+    component selects the Lamb output: 0 = horizontal, 1 = vertical.
 
     The quadrature in the reference implementation occasionally fails to
     converge on the last few samples, leaving isolated spikes well after the
@@ -111,7 +113,7 @@ def analytic_velocity(green, cfg):
     out = {}
     for x in cfg['offsets']:
         v = np.gradient(
-            np.array([ricker.integration_convolution(x, ti)[1] for ti in t]), t)
+            np.array([ricker.integration_convolution(x, ti)[component] for ti in t]), t)
         # a sample is an outlier if it dwarfs both of its neighbours
         pad = np.r_[v[0], v, v[-1]]
         neighbour = np.maximum(np.abs(pad[:-2]), np.abs(pad[2:]))
@@ -122,8 +124,8 @@ def analytic_velocity(green, cfg):
     return t, out
 
 
-def run_fd(dx, cfg, order=FD_ORDER):
-    """Vertical velocity at the surface receivers on a dx grid."""
+def run_fd(dx, cfg, order=FD_ORDER, component=1):
+    """Surface-receiver velocity on a dx grid (0 = vx, 1 = vz)."""
     nx = int(round(cfg['lx'] / dx)) + 1
     nz = int(round(cfg['lz'] / dx)) + 1
     vs = np.full((nz, nx), VS)
@@ -140,7 +142,7 @@ def run_fd(dx, cfg, order=FD_ORDER):
         vs, vp, rho, int(round(cfg['src_x'] / dx)), 0,
         rec_ix, np.zeros(len(rec_ix), dtype=int),
         nx, nz, dx, dx, dt, nt, cfg['fc'], int(round(cfg['pml'] / dx)),
-        wavelet, block_size=nt, fd_order=order, free_surface=True)[1])
+        wavelet, block_size=nt, fd_order=order, free_surface=True)[component])
     return vz, np.arange(nt) * dt
 
 

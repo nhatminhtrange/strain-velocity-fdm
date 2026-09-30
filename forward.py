@@ -228,6 +228,10 @@ def forward_jax(Vs, Vp, rho, src_x, src_z, rec_x, rec_z,
         c1, c2, c3, c4 = 9.0/8.0, -1.0/24.0, 0.0, 0.0
     else:
         c1, c2, c3, c4 = 1.0, 0.0, 0.0, 0.0
+    # 4th- and 6th-order staggered coefficients for the rows next to the
+    # free surface, where the full stencil would reach above the medium.
+    a1, a2 = 9.0/8.0, -1.0/24.0
+    b1, b2, b3 = 75.0/64.0, -25.0/384.0, 3.0/640.0
 
     # Grid size
     if free_surface:
@@ -478,18 +482,19 @@ def forward_jax(Vs, Vp, rho, src_x, src_z, rec_x, rec_z,
             Dz_V = Dz_V.at[4:nz-3, :nx-1].add(
                 c4 * (V[7:nz, :nx-1] - V[:nz-7, :nx-1]))
         if free_surface:
+            # Velocities above the surface have no valid image (only the
+            # stresses do), so rows whose stencil would reach above row 0
+            # drop to the highest order that stays inside the medium.
             if fd_order >= 4:
-                Dz_V = Dz_V.at[1, :nx-1].add(
-                    c2 * (V[0, :nx-1] + V[2, :nx-1]))
+                Dz_V = Dz_V.at[1, :nx-1].set(V[1, :nx-1] - V[0, :nx-1])
             if fd_order >= 8:
-                Dz_V = Dz_V.at[1, :nx-1].add(
-                    c3 * (V[1, :nx-1] + V[3, :nx-1])
-                    + c4 * (V[2, :nx-1] + V[4, :nx-1]))
-                Dz_V = Dz_V.at[2, :nx-1].add(
-                    c3 * (V[0, :nx-1] + V[4, :nx-1])
-                    + c4 * (V[1, :nx-1] + V[5, :nx-1]))
-                Dz_V = Dz_V.at[3, :nx-1].add(
-                    c4 * (V[0, :nx-1] + V[6, :nx-1]))
+                Dz_V = Dz_V.at[2, :nx-1].set(
+                    a1 * (V[2, :nx-1] - V[1, :nx-1])
+                    + a2 * (V[3, :nx-1] - V[0, :nx-1]))
+                Dz_V = Dz_V.at[3, :nx-1].set(
+                    b1 * (V[3, :nx-1] - V[2, :nx-1])
+                    + b2 * (V[4, :nx-1] - V[1, :nx-1])
+                    + b3 * (V[5, :nx-1] - V[0, :nx-1]))
         Dz_V, p_Dz_V = _pml_apply(Dz_V, kz, p_Dz_V, bz, az)
         ez = ez.at[0:nz, :].add(dt/dz * Dz_V[0:nz, :])
 
@@ -506,18 +511,17 @@ def forward_jax(Vs, Vp, rho, src_x, src_z, rec_x, rec_z,
             Dz_U = Dz_U.at[3:nz-4, 1:nx].add(
                 c4 * (U[7:nz, 1:nx] - U[:nz-7, 1:nx]))
         if free_surface:
+            # Reduced-order stencils near the surface, as for εzz above.
             if fd_order >= 4:
-                Dz_U = Dz_U.at[0, 1:nx].add(
-                    c2 * (U[2, 1:nx] - U[0, 1:nx]))
+                Dz_U = Dz_U.at[0, 1:nx].set(U[1, 1:nx] - U[0, 1:nx])
             if fd_order >= 8:
-                Dz_U = Dz_U.at[0, 1:nx].add(
-                    c3 * (U[3, 1:nx] - U[1, 1:nx])
-                    + c4 * (U[4, 1:nx] - U[2, 1:nx]))
-                Dz_U = Dz_U.at[1, 1:nx].add(
-                    c3 * (U[4, 1:nx] - U[0, 1:nx])
-                    + c4 * (U[5, 1:nx] - U[1, 1:nx]))
-                Dz_U = Dz_U.at[2, 1:nx].add(
-                    c4 * (U[6, 1:nx] - U[0, 1:nx]))
+                Dz_U = Dz_U.at[1, 1:nx].set(
+                    a1 * (U[2, 1:nx] - U[1, 1:nx])
+                    + a2 * (U[3, 1:nx] - U[0, 1:nx]))
+                Dz_U = Dz_U.at[2, 1:nx].set(
+                    b1 * (U[3, 1:nx] - U[2, 1:nx])
+                    + b2 * (U[4, 1:nx] - U[1, 1:nx])
+                    + b3 * (U[5, 1:nx] - U[0, 1:nx]))
         Dz_U, p_Dz_U = _pml_apply(Dz_U, kz, p_Dz_U, bz, az)
 
         Dx_V = jnp.zeros((nz, nx))
