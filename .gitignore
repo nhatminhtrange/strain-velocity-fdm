@@ -6,8 +6,13 @@ validation/bin/
 validation/OUTPUT_FILES/
 validation/DATA/
 validation/solver.log
-validation/results/*.npz
-validation/results/*.pdf
 
-# downloaded on demand by compare_analytic.py (LGPL-3.0, not redistributed)
+# comparison caches and logs (validation/results/*.png are kept)
+validation/results/*.npz
+validation/results/*.log
+
+# downloaded on demand by validation/lamb.py (LGPL-3.0, not redistributed)
 validation/external/
+
+# raw SPECFEM2D runs (packed into validation/reference/)
+validation/specfem_results/

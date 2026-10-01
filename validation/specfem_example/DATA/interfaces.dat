@@ -1,0 +1,14 @@
+# number of interfaces
+2
+#
+# interface 1 (bottom of the mesh)
+ 2
+     0.d0     0.d0
+   10780.0d0     0.d0
+# interface 2 (top surface)
+ 2
+     0.d0    3420.0d0
+   10780.0d0    3420.0d0
+#
+# number of spectral elements in the vertical direction
+ 171

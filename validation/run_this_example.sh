@@ -6,6 +6,9 @@
 set -e
 
 SPECFEM_ROOT=${SPECFEM_ROOT:-/home/mtran/specfem2d}
+# SPECFEM was built against the system OpenMPI; the mpirun on PATH (conda)
+# is MPICH and cannot launch it
+MPIRUN=${MPIRUN:-/usr/lib64/openmpi/bin/mpirun}
 
 echo "running: $(date)"
 
@@ -20,7 +23,7 @@ cp DATA/Par_file DATA/SOURCE DATA/STATIONS OUTPUT_FILES/
 NPROC=$(grep ^NPROC DATA/Par_file | cut -d = -f 2 | cut -d \# -f 1 | tr -d ' ')
 
 run() {
-  if [ "$NPROC" -eq 1 ]; then "$1"; else mpirun -np "$NPROC" "$1"; fi
+  if [ "$NPROC" -eq 1 ]; then "$1"; else "$MPIRUN" -np "$NPROC" "$1"; fi
 }
 
 echo "running mesher on $NPROC core(s)..."

@@ -34,24 +34,24 @@ DATA_DIR = os.path.join(CASE_DIR, 'DATA')
 DX = 20.0            # model grid spacing (m)
 TMAX = 6.0           # simulation length (s)
 
-# Source frequency. fc = 3 Hz gives ~7 grid points per shortest wavelength at
-# dx = 20 m (Vs_min = 881 m/s, fmax ~ 2.5 fc), enough for the FD solver to
-# resolve the surface wave.
-FC = 3.0
+# Source frequency. fc = 5 Hz gives ~3.5 FD grid points per shortest S
+# wavelength at dx = 20 m (Vs_min = 881 m/s, fmax ~ 2.5 fc).
+FC = 5.0
 
 # Spectral-element size (m). With 4th-order GLL each element carries 4
-# intervals, so 40 m yields ~5.9 GLL points per shortest wavelength.
-ELEM_SIZE = 40.0
-NELEM_PML = 10
+# intervals, so 20 m at fc = 5 Hz yields ~14 GLL points per shortest
+# S wavelength (SPECFEM suggests Ricker fc up to ~14 Hz).
+ELEM_SIZE = 20.0
+NELEM_PML = 20       # keeps the PML 400 m thick
 PML = NELEM_PML * ELEM_SIZE
 
-FREE_SURFACE = False # True places a free surface on top instead
-SRC_DEPTH = 600.0    # source depth in metres below the physical top
-REC_DEPTH = 200.0    # receiver depth in metres
+FREE_SURFACE = True  # False puts a PML on all four sides
+SRC_DEPTH = 0.0      # source depth in metres below the physical top
+REC_DEPTH = 0.0      # receiver depth in metres
 SRC_X = 2000.0       # source position in metres
 REC_STRIDE = 1       # receiver every REC_STRIDE model columns
 
-NPROC = 1            # MPI is unreliable on this machine; run serial
+NPROC = 16           # run with the system OpenMPI (see run_this_example.sh)
 
 
 def write_record(fp, values):
