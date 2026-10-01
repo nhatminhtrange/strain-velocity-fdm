@@ -12,8 +12,9 @@ common.py).
 Usage:
     CUDA_VISIBLE_DEVICES=0 python compare_homogeneous.py
 
-Writes results/homogeneous_{vz,vx}.png and prints relative RMS errors
-against the analytic solution.
+Writes results/homogeneous_{vz,vx}.png, the same comparison on coarser FD
+grids (CONV_DX) in results/homogeneous_convergence_{vz,vx}.png, and prints
+relative RMS errors against the analytic solution.
 
 The analytic Green's function comes from lamb_2dhalf_surface (Ki-Tae Kim,
 LGPL-3.0, https://github.com/ktkimit/lamb_2dhalf_surface). It is not
@@ -34,8 +35,8 @@ import sys
 
 import numpy as np
 from scipy.integrate import quad
-from common import (COMPONENTS, FC, FD_DX, HALF_SPACE, OUT_DIR, SPECFEM_SIGN,
-                    T_MAX, comparison_figure, fd_gather, load_reference, receiver_index, rel_rms)
+from common import (COMPONENTS, CONV_DX, FC, FD_DX, HALF_SPACE, OUT_DIR, SPECFEM_SIGN,
+                    T_MAX, comparison_figure, conv_style, fd_gather, load_reference, receiver_index, rel_rms)
 
 # ── analytic Lamb solution ──────────────────────────────────────────────────
 
@@ -166,9 +167,11 @@ def lamb_traces(green, fc, offsets, t):
 
 
 def collect(green):
-    """Common time axis and Lamb / SPECFEM / FD traces at OFFSETS."""
+    """Common time axis and Lamb / SPECFEM / FD traces at OFFSETS.
+
+    fd[dx] holds the SV-FDM traces for every grid in CONV_DX.
+    """
     ref = load_reference('homogeneous', FC)
-    fd = fd_gather('homogeneous', FC, ref)
     step = max(1, int(round(LAMB_DT / (ref['t'][1] - ref['t'][0]))))
     t = ref['t'][::step]
     idx = [receiver_index(ref, o) for o in OFFSETS]
@@ -177,7 +180,10 @@ def collect(green):
         lamb=lamb_traces(green, FC, OFFSETS, t),
         spec={c: np.array([SPECFEM_SIGN[c] * ref[c][::step, i] for i in idx])
               for c in COMPONENTS},
-        fd={c: np.array([fd[c][::step, i] for i in idx]) for c in COMPONENTS})
+        fd={dx: {c: np.array([g[c][::step, i] for i in idx])
+                 for c in COMPONENTS}
+            for dx, g in ((dx, fd_gather('homogeneous', FC, ref, dx))
+                          for dx in CONV_DX)})
 
 
 def main():
@@ -190,8 +196,10 @@ def main():
     print(f"{'comp':>4s} {'code':>8s} " +
           ' '.join(f'{o / 1000:>6g}km' for o in OFFSETS))
     for c in COMPONENTS:
-        for code in ('spec', 'fd'):
-            errs = [rel_rms(r[code][c][i], r['lamb'][c][i])
+        rows = [('spec', r['spec'][c])]
+        rows += [(f'fd {dx:g} m', r['fd'][dx][c]) for dx in CONV_DX]
+        for code, traces in rows:
+            errs = [rel_rms(traces[i], r['lamb'][c][i])
                     for i in range(len(OFFSETS))]
             print(f"{c:>4s} {code:>8s} " + ' '.join(f'{e:8.4f}' for e in errs))
 
@@ -201,9 +209,20 @@ def main():
             'homogeneous', r['src_x'], OFFSETS, r['t'],
             [('Analytic (Lamb)', r['lamb'][c], dict(color='k', lw=2.2)),
              ('SPECFEM2D', r['spec'][c], dict(color='tab:blue', lw=1.1)),
-             (f'SV-FDM, grid size = {FD_DX:g} m', r['fd'][c],
+             (f'SV-FDM, grid size = {FD_DX:g} m', r['fd'][FD_DX][c],
               dict(color='tab:red', lw=1.1, ls=(0, (3, 2))))],
             f'$v_{c[1]}$', path, T_MAX)
+        print(f"Saved {path}")
+
+    # convergence: the same comparison on coarser FD grids
+    for c in COMPONENTS:
+        curves = [('Analytic (Lamb)', r['lamb'][c], dict(color='k', lw=2.2)),
+                  ('SPECFEM2D', r['spec'][c], dict(color='tab:blue', lw=1.1))]
+        curves += [(f'SV-FDM, grid size = {dx:g} m', r['fd'][dx][c],
+                    conv_style(dx)) for dx in CONV_DX]
+        path = os.path.join(OUT_DIR, f'homogeneous_convergence_{c}.png')
+        comparison_figure('homogeneous', r['src_x'], OFFSETS, r['t'], curves,
+                          f'$v_{c[1]}$', path, T_MAX)
         print(f"Saved {path}")
 
 

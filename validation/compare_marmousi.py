@@ -18,13 +18,10 @@ import os
 
 import numpy as np
 
-from common import (COMPONENTS, FC, FD_DX, SPECFEM_SIGN, OUT_DIR, T_MAX, comparison_figure, fd_gather,
+from common import (COMPONENTS, CONV_DX, FC, FD_DX, conv_style, SPECFEM_SIGN, OUT_DIR, T_MAX, comparison_figure, fd_gather,
                     load_reference, receiver_index, rel_rms)
 
 OFFSETS = [1000, 2000, 3000, 5000]
-CONV_DX = [10.0, 5.0, FD_DX]          # grids of the convergence figure
-CONV_STYLE = {10.0: dict(color='tab:blue', lw=1.0),
-              5.0: dict(color='tab:orange', lw=1.0)}
 MIN_OFFSET = 200.0       # receivers closer to the source are left out of the
                          # whole-gather metrics (near-field singularity)
 
@@ -77,8 +74,7 @@ def main():
     for c in COMPONENTS:
         curves = [('SPECFEM2D', ref[c][:, idx].T, dict(color='k', lw=1.8))]
         curves += [(f'SV-FDM, grid size = {dx:g} m', fds[dx][c][:, idx].T,
-                    CONV_STYLE.get(dx, dict(color='tab:red', lw=1.0,
-                                            ls=(0, (3, 2)))))
+                    conv_style(dx))
                    for dx in CONV_DX]
         path = os.path.join(OUT_DIR, f'marmousi_convergence_{c}.png')
         comparison_figure('marmousi', ref['src_x'], OFFSETS, ref['t'], curves,

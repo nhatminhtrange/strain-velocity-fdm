@@ -87,8 +87,9 @@ any of the traces.
 | Case | Model | References | SV-FDM grid size |
 | --- | --- | --- | --- |
 | 1 | Homogeneous half-space (Vp 2000 m/s, Vs 1155 m/s, ρ 2000 kg/m³) | Analytic Lamb solution, SPECFEM2D | 1 m |
-| 2 | Marmousi2 | SPECFEM2D | 1 m |
-| 3 | Marmousi2, grid convergence | SPECFEM2D | 10, 5 and 1 m |
+| 2 | Homogeneous half-space, grid convergence | Analytic Lamb solution, SPECFEM2D | 10, 5, 2 and 1 m |
+| 3 | Marmousi2 | SPECFEM2D | 1 m |
+| 4 | Marmousi2, grid convergence | SPECFEM2D | 10, 5, 2 and 1 m |
 
 SPECFEM2D uses 20 m spectral elements with 4th-order GLL points. SV-FDM
 uses 8th-order spatial stencils.
@@ -99,13 +100,19 @@ uses 8th-order spatial stencils.
 | --- | --- |
 | ![Homogeneous vz](validation/results/homogeneous_vz.png) | ![Homogeneous vx](validation/results/homogeneous_vx.png) |
 
-### Case 2: Marmousi
+### Case 2: grid convergence on the half-space
+
+| v<sub>z</sub> | v<sub>x</sub> |
+| --- | --- |
+| ![Convergence vz](validation/results/homogeneous_convergence_vz.png) | ![Convergence vx](validation/results/homogeneous_convergence_vx.png) |
+
+### Case 3: Marmousi
 
 | v<sub>z</sub> | v<sub>x</sub> |
 | --- | --- |
 | ![Marmousi vz](validation/results/marmousi_vz.png) | ![Marmousi vx](validation/results/marmousi_vx.png) |
 
-### Case 3: grid convergence on Marmousi
+### Case 4: grid convergence on Marmousi
 
 | v<sub>z</sub> | v<sub>x</sub> |
 | --- | --- |
@@ -117,7 +124,7 @@ uses 8th-order spatial stencils.
   8th order, the Rayleigh wave converges at a much lower rate. At 5 Hz, a
   1 m grid is needed for close agreement. At 5 m and 10 m, the surface
   wave shows clear numerical dispersion: it arrives early, and the error
-  grows with offset (Case 3).
+  grows with offset (Cases 2 and 4).
 * **Marmousi does not match SPECFEM2D as closely as the half-space
   does.** Even at 1 m, the SV-FDM and SPECFEM2D traces drift apart in
   phase and amplitude as the offset grows, with the largest difference on
@@ -137,8 +144,8 @@ comparisons run without a SPECFEM2D installation. A GPU is needed for the
 
 ```bash
 cd validation
-python compare_homogeneous.py     # Case 1
-python compare_marmousi.py        # Cases 2 and 3
+python compare_homogeneous.py     # Cases 1 and 2
+python compare_marmousi.py        # Cases 3 and 4
 ```
 
 The SPECFEM2D inputs for the Marmousi run are in

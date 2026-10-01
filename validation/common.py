@@ -49,6 +49,18 @@ HALF_SPACE = dict(vp=2000.0, vs=1155.0, rho=2000.0)
 SPECFEM_SIGN = {'vz': 1.0, 'vx': -1.0}
 COMPONENTS = ('vz', 'vx')
 
+# grids of the convergence figures; the finest is FD_DX
+CONV_DX = [10.0, 5.0, 2.0, FD_DX]
+CONV_STYLE = {10.0: dict(color='tab:green', lw=1.0),
+              5.0: dict(color='tab:orange', lw=1.0),
+              2.0: dict(color='tab:purple', lw=1.0)}
+FINE_STYLE = dict(color='tab:red', lw=1.0, ls=(0, (3, 2)))
+
+
+def conv_style(dx):
+    return CONV_STYLE.get(dx, FINE_STYLE)
+
+
 T_MAX = 5.5                  # end of the plotted / compared record (s)
 
 PLOT_STYLE = {
@@ -217,8 +229,10 @@ def comparison_figure(model, src_x, offsets, t, curves, ylabel, path,
                       ls='none', label='Receivers')]
     handles += [Line2D([], [], label=label, **style)
                 for label, _, style in curves]
-    fig.legend(handles=handles, loc='lower center', ncol=len(handles) if len(handles) <= 5 else 3,
-               frameon=False, bbox_to_anchor=(0.5, -0.03),
+    ncol = len(handles) if len(handles) <= 5 else 4
+    rows = -(-len(handles) // ncol)
+    fig.legend(handles=handles, loc='lower center', ncol=ncol,
+               frameon=False, bbox_to_anchor=(0.5, -0.03 - 0.035 * (rows - 1)),
                columnspacing=1.2, handletextpad=0.5)
     fig.savefig(path, bbox_inches='tight')
     plt.close(fig)
